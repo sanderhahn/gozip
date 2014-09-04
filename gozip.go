@@ -9,7 +9,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+
+	patch "github.com/sanderhahn/gozip/patchzip"
 )
 
 func IsZip(path string) bool {
@@ -32,18 +35,30 @@ func Zip(path string, dirs []string) (err error) {
 	}
 	defer f.Close()
 
-	w := zip.NewWriter(f)
+	startoffset, err := f.Seek(0, os.SEEK_END)
+	if err != nil {
+		return
+	}
+
+	w := patch.NewWriterAt(f, startoffset)
+
 	for _, dir := range dirs {
 		err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			// Empty directories get lost somewhere
+
+			fh, err := patch.FileInfoHeader(info)
+			if err != nil {
+				return err
+			}
+			fh.Name = path
+
+			p, err := w.CreateHeader(fh)
+			if err != nil {
+				return err
+			}
 			if !info.IsDir() {
-				p, err := w.Create(path)
-				if err != nil {
-					return err
-				}
 				content, err := ioutil.ReadFile(path)
 				if err != nil {
 					return err
@@ -60,27 +75,39 @@ func Zip(path string, dirs []string) (err error) {
 	return
 }
 
-func Unzip(path string) (err error) {
-	r, err := zip.OpenReader(path)
+func Unzip(zippath string, destination string) (err error) {
+	r, err := zip.OpenReader(zippath)
 	if err != nil {
 		return err
 	}
 	for _, f := range r.File {
-		os.MkdirAll(filepath.Dir(f.Name), 0755)
-		out, err := os.Create(f.Name)
-		if err != nil {
-			return err
+		fullname := path.Join(destination, f.Name)
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fullname, f.FileInfo().Mode().Perm())
+		} else {
+			os.MkdirAll(filepath.Dir(fullname), 0755)
+			perms := f.FileInfo().Mode().Perm()
+			out, err := os.OpenFile(fullname, os.O_CREATE|os.O_RDWR, perms)
+			if err != nil {
+				return err
+			}
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			_, err = io.CopyN(out, rc, f.FileInfo().Size())
+			if err != nil {
+				return err
+			}
+			rc.Close()
+			out.Close()
+
+			mtime := f.FileInfo().ModTime()
+			err = os.Chtimes(fullname, mtime, mtime)
+			if err != nil {
+				return err
+			}
 		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		_, err = io.CopyN(out, rc, f.FileInfo().Size())
-		if err != nil {
-			return err
-		}
-		rc.Close()
-		out.Close()
 	}
 	return
 }
@@ -98,14 +125,15 @@ func UnzipList(path string) (list []string, err error) {
 
 func main() {
 	var list, extract, create bool
-	flag.BoolVar(&create, "c", false, "create zip")
-	flag.BoolVar(&list, "l", false, "list zip")
-	flag.BoolVar(&extract, "x", false, "extract zip")
+	flag.BoolVar(&create, "c", false, "create zip (arguments: zipfile [files...])")
+	flag.BoolVar(&list, "l", false, "list zip (arguments: zipfile)")
+	flag.BoolVar(&extract, "x", false, "extract zip (arguments: zipfile [destination]")
 
 	flag.Parse()
 
 	args := flag.Args()
-	if len(args) == 1 && list {
+	argc := len(args)
+	if list && argc == 1 {
 		path := args[0]
 		list, err := UnzipList(path)
 		if err != nil {
@@ -114,18 +142,22 @@ func main() {
 		for _, f := range list {
 			fmt.Printf("%s\n", f)
 		}
-	} else if len(args) == 1 && extract {
+	} else if extract && (argc == 1 || argc == 2) {
 		path := args[0]
-		err := Unzip(path)
+		dest := "."
+		if argc == 2 {
+			dest = args[1]
+		}
+		err := Unzip(path, dest)
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else if create && len(args) > 1 {
+	} else if create && argc > 1 {
 		err := Zip(args[0], args[1:])
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		flag.PrintDefaults()
+		flag.Usage()
 	}
 }

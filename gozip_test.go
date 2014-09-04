@@ -3,44 +3,74 @@ package main
 import (
 	"io/ioutil"
 	"os"
+	"path"
 	"testing"
+	"time"
 )
 
 func TestZip(t *testing.T) {
 
-	path := "test.zip"
+	zippath := "test.zip"
 
-	ioutil.WriteFile(path, []byte(""), 0644)
+	ioutil.WriteFile(zippath, []byte("<possibly an exefile>"), 0644)
 
-	os.MkdirAll("views", 0755)
-	ioutil.WriteFile("views/hello.tpl", []byte("<h1>Hello World</h1>"), 0644)
-	ioutil.WriteFile("hello.txt", []byte("Hello World"), 0644)
+	os.MkdirAll("files/emptydir", 0755)
+	ioutil.WriteFile("hello.txt", []byte("Hello World"), 0777)
+	ioutil.WriteFile("files/hello.tpl", []byte("<h1>Hello World</h1>"), 0644)
 
-	Zip(path, []string{"views", "hello.txt"})
+	testfileheader := "hello.txt"
+	info, err := os.Stat(testfileheader)
+	if err != nil {
+		t.Error(err)
+	}
+	actualperms := info.Mode().Perm()
 
-	if !IsZip(path) {
+	filetime := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
+	err = os.Chtimes(testfileheader, filetime, filetime)
+	if err != nil {
+		t.Error(err)
+	}
+
+	Zip(zippath, []string{"files", "hello.txt"})
+
+	if !IsZip(zippath) {
 		t.Error("zip test failed")
 	}
 
-	os.RemoveAll("views")
+	os.RemoveAll("files")
 	os.Remove("hello.txt")
 
-	if err := Unzip(path); err != nil {
+	if err := Unzip(zippath, "extract"); err != nil {
 		t.Error("unzip failed")
 	}
 
-	if _, err := os.Stat("views/hello.tpl"); os.IsNotExist(err) {
+	if _, err := os.Stat("extract/files/hello.tpl"); os.IsNotExist(err) {
 		t.Error("unzip didn't work")
 	}
-	if _, err := os.Stat("views/hello.tpl"); os.IsNotExist(err) {
+	if _, err := os.Stat("extract/files/hello.tpl"); os.IsNotExist(err) {
 		t.Error("hello.txt")
 	}
+	if _, err := os.Stat("extract/files/emptydir"); os.IsNotExist(err) {
+		t.Error("unzip didn't create empty dir")
+	}
 
-	os.RemoveAll("views")
-	os.Remove("hello.txt")
+	info, err = os.Stat(path.Join("extract", testfileheader))
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if info.Mode().Perm() != actualperms {
+		t.Error("unzip didn't set file perms")
+	}
+	if !info.ModTime().Equal(filetime) {
+		t.Error("unzip didn't set file modtime")
+	}
 
 	if !t.Failed() {
+		os.Remove("hello.txt")
 		os.Remove("test.zip")
+		os.RemoveAll("files")
+		os.RemoveAll("extract")
 	}
 
 }
