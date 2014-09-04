@@ -40,6 +40,11 @@ func TestZip(t *testing.T) {
 	os.RemoveAll("files")
 	os.Remove("hello.txt")
 
+	list, err := UnzipList(zippath)
+	if err != nil || len(list) != 4 {
+		t.Error("unzip list failed")
+	}
+
 	if err := Unzip(zippath, "extract"); err != nil {
 		t.Error("unzip failed")
 	}
