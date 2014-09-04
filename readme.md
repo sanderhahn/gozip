@@ -1,6 +1,6 @@
 # gozip
 
-Small patch to make it possible to create self extracting executables using Golang. The patch doesn't require you to run `zip -A exefile` to correct the zip entry offsets. The original source is taken from the [golang archive pkg source](http://golang.org/src/pkg/archive/zip/writer.go?m=text).
+Small patch to make it possible to create self extracting executables using Golang. The patch doesn't require you to run `zip -A exefile` to correct the zip entry offsets. The original source is taken from the [golang archive pkg source](http://golang.org/src/pkg/archive/zip/).
 
 The only change is the `NewWriterAt` constructor that takes the initial file length:
 
