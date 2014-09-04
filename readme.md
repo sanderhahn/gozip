@@ -5,7 +5,7 @@ Small patch to make it possible to create self extracting executables using Gola
 The only change is the `NewWriterAt` constructor that takes the initial file length:
 
 ```go
-# writer.go
+// writer.go
 
 func NewWriterAt(w io.Writer, count int64) *Writer {
 	return &Writer{cw: &countWriter{w: bufio.NewWriter(w), count: count}}
