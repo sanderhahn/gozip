@@ -52,9 +52,6 @@ func TestZip(t *testing.T) {
 	if _, err := os.Stat("extract/files/hello.tpl"); os.IsNotExist(err) {
 		t.Error("unzip didn't work")
 	}
-	if _, err := os.Stat("extract/files/hello.tpl"); os.IsNotExist(err) {
-		t.Error("hello.txt")
-	}
 	if _, err := os.Stat("extract/files/emptydir"); os.IsNotExist(err) {
 		t.Error("unzip didn't create empty dir")
 	}
