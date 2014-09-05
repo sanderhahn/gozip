@@ -17,7 +17,7 @@ Usage of gozip:
 # create a test.zip file with readme.md file and patchzip dir
 gozip -c test.zip readme.md patchzip
 
-# list the content of a zip
+# list the contents of a zip
 gozip -l test.zip
 
 # add zip contents to the ./gozip executable
