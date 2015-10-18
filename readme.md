@@ -48,7 +48,7 @@ gozip -x ./gozip test
 It is possible to use the `zip` command to achieve the same:
 
 ```bash
-zip test.zip readme.md patchzip
+zip test.zip readme.md
 cat test.zip >>./gozip
 zip -A ./gozip
 zip -l ./gozip
