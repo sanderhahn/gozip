@@ -53,3 +53,7 @@ cat test.zip >>./gozip
 zip -A ./gozip
 zip -l ./gozip
 ```
+
+## License
+
+The source code is (public domain)[UNLICENSE.txt], feel free to reuse.
