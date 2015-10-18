@@ -56,4 +56,4 @@ zip -l ./gozip
 
 ## License
 
-The source code is (public domain)[UNLICENSE.txt], feel free to reuse.
+The source code is [public domain](UNLICENSE.txt), feel free to reuse.
