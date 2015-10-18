@@ -11,8 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
-	patch "github.com/sanderhahn/gozip/patchzip"
 )
 
 func IsZip(path string) bool {
@@ -40,7 +38,8 @@ func Zip(path string, dirs []string) (err error) {
 		return
 	}
 
-	w := patch.NewWriterAt(f, startoffset)
+	w := zip.NewWriter(f)
+	w.SetOffset(startoffset)
 
 	for _, dir := range dirs {
 		err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -48,7 +47,7 @@ func Zip(path string, dirs []string) (err error) {
 				return err
 			}
 
-			fh, err := patch.FileInfoHeader(info)
+			fh, err := zip.FileInfoHeader(info)
 			if err != nil {
 				return err
 			}
