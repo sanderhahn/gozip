@@ -1,4 +1,4 @@
-package main
+package gozip
 
 import (
 	"io/ioutil"
