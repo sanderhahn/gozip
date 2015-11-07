@@ -1,18 +1,16 @@
-package main
+package gozip
 
 import (
 	"archive/zip"
 	"errors"
-	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 )
 
+// IsZip checks to see if path is already a zip file
 func IsZip(path string) bool {
 	r, err := zip.OpenReader(path)
 	if err == nil {
@@ -22,6 +20,7 @@ func IsZip(path string) bool {
 	return false
 }
 
+// Zip takes all the files (dirs) and zips them into path
 func Zip(path string, dirs []string) (err error) {
 	if IsZip(path) {
 		return errors.New(path + " is already a zip file")
@@ -74,6 +73,7 @@ func Zip(path string, dirs []string) (err error) {
 	return
 }
 
+// Unzip unzips the file zippath and puts it in destination
 func Unzip(zippath string, destination string) (err error) {
 	r, err := zip.OpenReader(zippath)
 	if err != nil {
@@ -111,6 +111,7 @@ func Unzip(zippath string, destination string) (err error) {
 	return
 }
 
+// UnzipList Lists all the files in zip file
 func UnzipList(path string) (list []string, err error) {
 	r, err := zip.OpenReader(path)
 	if err != nil {
@@ -122,41 +123,41 @@ func UnzipList(path string) (list []string, err error) {
 	return
 }
 
-func main() {
-	var list, extract, create bool
-	flag.BoolVar(&create, "c", false, "create zip (arguments: zipfile [files...])")
-	flag.BoolVar(&list, "l", false, "list zip (arguments: zipfile)")
-	flag.BoolVar(&extract, "x", false, "extract zip (arguments: zipfile [destination]")
-
-	flag.Parse()
-
-	args := flag.Args()
-	argc := len(args)
-	if list && argc == 1 {
-		path := args[0]
-		list, err := UnzipList(path)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, f := range list {
-			fmt.Printf("%s\n", f)
-		}
-	} else if extract && (argc == 1 || argc == 2) {
-		path := args[0]
-		dest := "."
-		if argc == 2 {
-			dest = args[1]
-		}
-		err := Unzip(path, dest)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else if create && argc > 1 {
-		err := Zip(args[0], args[1:])
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		flag.Usage()
-	}
-}
+// func main() {
+// 	var list, extract, create bool
+// 	flag.BoolVar(&create, "c", false, "create zip (arguments: zipfile [files...])")
+// 	flag.BoolVar(&list, "l", false, "list zip (arguments: zipfile)")
+// 	flag.BoolVar(&extract, "x", false, "extract zip (arguments: zipfile [destination]")
+//
+// 	flag.Parse()
+//
+// 	args := flag.Args()
+// 	argc := len(args)
+// 	if list && argc == 1 {
+// 		path := args[0]
+// 		list, err := UnzipList(path)
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+// 		for _, f := range list {
+// 			fmt.Printf("%s\n", f)
+// 		}
+// 	} else if extract && (argc == 1 || argc == 2) {
+// 		path := args[0]
+// 		dest := "."
+// 		if argc == 2 {
+// 			dest = args[1]
+// 		}
+// 		err := Unzip(path, dest)
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+// 	} else if create && argc > 1 {
+// 		err := Zip(args[0], args[1:])
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+// 	} else {
+// 		flag.Usage()
+// 	}
+// }
