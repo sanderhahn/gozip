@@ -7,7 +7,7 @@ Create a self extracting executable by calling the `Unzip` func on its own binar
 The `gozip` command can be used to add zipped content to your binary.
 
 ```bash
-go get github.com/clemmen2/gozip
+go get github.com/dixonwille/gozip
 ```
 
 ## License
