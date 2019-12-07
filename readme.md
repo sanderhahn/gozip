@@ -42,17 +42,17 @@ Usage of gozip:
 # make temporary copy of gozip
 $ cp `which gozip` gozip
 
-# add readme.md and UNLICENSE.txt as zip archive behind binary
-$ gozip -c gozip readme.md UNLICENSE.txt
+# add readme.md and LICENSE.txt as zip archive behind binary
+$ gozip -c gozip readme.md LICENSE.txt
 
 # list archive with the binary itself
 $ ./gozip -l ./gozip
 readme.md
-UNLICENSE.txt
+LICENSE.txt
 ```
 
 ## License
 
-The source code is [public domain](UNLICENSE.txt), feel free to reuse.
+The source code uses the [MIT license](LICENSE.txt).
 
 Contributors: [@dixonwille](https://github.com/dixonwille)
