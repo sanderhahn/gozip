@@ -82,7 +82,6 @@ func Unzip(zippath string, destination string) (err error) {
 	}
 	defer r.Close()
 
-	// Make destination absolute (stable base, even with sudo)
 	destAbs, err := filepath.Abs(destination)
 	if err != nil {
 		return err
