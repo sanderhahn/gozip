@@ -1,5 +1,8 @@
 # Gozip
 
+> NOTE: Please evaluate if [archive/zip](https://pkg.go.dev/archive/zip) is sufficient
+> for your use case before using this library.
+
 The `gozip` library can be used to add, list and extract zipped content into a
 zip file or behind an executable binary. The use case for adding zip files
 behind a binary is to distribute one executable that can automatically extract
@@ -55,4 +58,4 @@ LICENSE.txt
 
 The source code uses the [MIT license](LICENSE.txt).
 
-Contributors: [@dixonwille](https://github.com/dixonwille)
+Contributors: [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
