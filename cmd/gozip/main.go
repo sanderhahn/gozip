@@ -9,16 +9,16 @@ import (
 )
 
 func main() {
-	var list, extract, create bool
+	var listFlag, extract, create bool
 	flag.BoolVar(&create, "c", false, "create zip (arguments: zipfile [files...])")
-	flag.BoolVar(&list, "l", false, "list zip (arguments: zipfile)")
-	flag.BoolVar(&extract, "x", false, "extract zip (arguments: zipfile [destination]")
+	flag.BoolVar(&listFlag, "l", false, "list zip (arguments: zipfile)")
+	flag.BoolVar(&extract, "x", false, "extract zip (arguments: zipfile [destination])")
 
 	flag.Parse()
 
 	args := flag.Args()
 	argc := len(args)
-	if list && argc == 1 {
+	if listFlag && argc == 1 {
 		path := args[0]
 		list, err := gozip.UnzipList(path)
 		if err != nil {
