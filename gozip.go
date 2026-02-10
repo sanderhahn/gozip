@@ -3,13 +3,13 @@ package gozip
 import (
 	"archive/zip"
 	"errors"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
-    securejoin "github.com/cyphar/filepath-securejoin"
+
+	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // IsZip checks to see if path is already a zip file
@@ -59,7 +59,7 @@ func Zip(path string, dirs []string) (err error) {
 				return err
 			}
 			if !info.IsDir() {
-				content, err := ioutil.ReadFile(path)
+				content, err := os.ReadFile(path)
 				if err != nil {
 					return err
 				}
@@ -90,6 +90,11 @@ func Unzip(zippath string, destination string) (err error) {
 	for _, f := range r.File {
 		entry := filepath.ToSlash(f.Name)
 		entry = strings.TrimLeft(entry, "/")
+
+		// Check for path traversal attempts
+		if strings.Contains(entry, "..") {
+			return fmt.Errorf("illegal path %q: contains path traversal", f.Name)
+		}
 
 		fullname, err := securejoin.SecureJoin(destAbs, entry)
 		if err != nil {
