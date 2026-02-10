@@ -8,6 +8,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
+    securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // IsZip checks to see if path is already a zip file
@@ -73,14 +75,27 @@ func Zip(path string, dirs []string) (err error) {
 	return
 }
 
-// Unzip unzips the file zippath and puts it in destination
 func Unzip(zippath string, destination string) (err error) {
 	r, err := zip.OpenReader(zippath)
 	if err != nil {
 		return err
 	}
+	defer r.Close()
+
+	destAbs, err := filepath.Abs(destination)
+	if err != nil {
+		return err
+	}
+
 	for _, f := range r.File {
-		fullname := path.Join(destination, f.Name)
+		entry := filepath.ToSlash(f.Name)
+		entry = strings.TrimLeft(entry, "/")
+
+		fullname, err := securejoin.SecureJoin(destAbs, entry)
+		if err != nil {
+			return fmt.Errorf("illegal path %q: %w", f.Name, err)
+		}
+
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fullname, f.FileInfo().Mode().Perm())
 		} else {
