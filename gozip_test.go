@@ -13,6 +13,13 @@ func TestZip(t *testing.T) {
 
 	zippath := "test.zip"
 
+	t.Cleanup(func() {
+		os.Remove("hello.txt")
+		os.Remove(zippath)
+		os.RemoveAll("files")
+		os.RemoveAll("extract")
+	})
+
 	os.WriteFile(zippath, []byte("<possibly an exefile>"), 0644)
 
 	os.MkdirAll("files/emptydir", 0755)
@@ -32,7 +39,9 @@ func TestZip(t *testing.T) {
 		t.Error(err)
 	}
 
-	Zip(zippath, []string{"files", "hello.txt"})
+	if err := Zip(zippath, []string{"files", "hello.txt"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if !IsZip(zippath) {
 		t.Error("zip test failed")
@@ -68,14 +77,6 @@ func TestZip(t *testing.T) {
 	if !info.ModTime().Equal(filetime) {
 		t.Error("unzip didn't set file modtime")
 	}
-
-	if !t.Failed() {
-		os.Remove("hello.txt")
-		os.Remove("test.zip")
-		os.RemoveAll("files")
-		os.RemoveAll("extract")
-	}
-
 }
 
 func TestZipPathTraversal(t *testing.T) {
@@ -114,4 +115,62 @@ func TestZipPathTraversal(t *testing.T) {
 	}
 
 	os.RemoveAll("extract_secure")
+}
+
+func TestFilePermissionsPreserved(t *testing.T) {
+	zippath := "perms_test.zip"
+
+	t.Cleanup(func() {
+		os.Remove(zippath)
+		os.RemoveAll("permfiles")
+		os.RemoveAll("extract_perms")
+	})
+
+	cases := []struct {
+		name string
+		perm os.FileMode
+	}{
+		{"permfiles/readonly.txt", 0444},
+		{"permfiles/readwrite.txt", 0644},
+		{"permfiles/executable.sh", 0755},
+		{"permfiles/owneronly.txt", 0600},
+		{"permfiles/allex.sh", 0777},
+	}
+
+	if err := os.MkdirAll("permfiles", 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range cases {
+		if err := os.WriteFile(tc.name, []byte("content of "+tc.name), tc.perm); err != nil {
+			t.Fatal(err)
+		}
+		// Explicitly chmod to bypass umask
+		if err := os.Chmod(tc.name, tc.perm); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Zip(zippath, []string{"permfiles"}); err != nil {
+		t.Fatal(err)
+	}
+
+	os.RemoveAll("permfiles")
+
+	if err := Unzip(zippath, "extract_perms"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range cases {
+		extracted := path.Join("extract_perms", tc.name)
+		info, err := os.Stat(extracted)
+		if err != nil {
+			t.Errorf("missing extracted file %s: %v", tc.name, err)
+			continue
+		}
+		got := info.Mode().Perm()
+		if got != tc.perm {
+			t.Errorf("%s: permissions = %o, want %o", tc.name, got, tc.perm)
+		}
+	}
 }
