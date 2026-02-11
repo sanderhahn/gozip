@@ -33,14 +33,17 @@ err := gozip.Unzip("file.zip", "destination")
 ## Self Extracting Binary
 
 The zip functions also work when the actual zip content starts behind a binary.
-For example its possible to append the `readme.md` into the `gozip` command.
+This makes it possible to distribute a single executable that carries its own
+payload files and extracts them at runtime.
+
+### Quick example with the gozip CLI
 
 ```bash
 $ gozip
 Usage of gozip:
   -c	create zip (arguments: zipfile [files...])
   -l	list zip (arguments: zipfile)
-  -x	extract zip (arguments: zipfile [destination]
+  -x	extract zip (arguments: zipfile [destination])
 
 # make temporary copy of gozip
 $ cp `which gozip` gozip
@@ -54,8 +57,114 @@ readme.md
 LICENSE.txt
 ```
 
+### Building your own self-extracting binary
+
+A complete example lives in [`examples/selfextract/`](examples/selfextract/).
+The key idea is that your program calls `gozip.Unzip(os.Executable(), dest)` to
+extract files from itself:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/sanderhahn/gozip"
+)
+
+func main() {
+	self, _ := os.Executable()
+
+	if !gozip.IsZip(self) {
+		fmt.Println("No embedded files. Append them first:")
+		fmt.Printf("  gozip -c %s <files...>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	if err := gozip.Unzip(self, "extracted"); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Files extracted to ./extracted")
+}
+```
+
+Then build and pack:
+
+```bash
+go build -o myapp .
+gozip -c myapp payload/   # append files to the binary
+./myapp                   # extracts payload/ into ./extracted/
+```
+
+Run the full demo with:
+
+```bash
+cd examples/selfextract
+bash demo.sh
+```
+
+### Using only the standard library
+
+Since `gozip` appends a standard zip archive, you can also extract the embedded
+files using only `archive/zip` from the Go standard library. The key is to use
+`zip.NewReader` (which takes an `io.ReaderAt` and the total file size) instead
+of `zip.OpenReader` — it searches backwards from the end of the file to find
+the zip central directory, which works even when the zip is appended to a binary.
+
+A complete example lives in [`examples/selfextract-stdlib/`](examples/selfextract-stdlib/):
+
+```go
+package main
+
+import (
+	"archive/zip"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	self, _ := os.Executable()
+
+	f, _ := os.Open(self)
+	defer f.Close()
+	info, _ := f.Stat()
+
+	// zip.NewReader finds the archive appended to the binary
+	r, err := zip.NewReader(f, info.Size())
+	if err != nil {
+		fmt.Println("No embedded files found.")
+		os.Exit(1)
+	}
+
+	for _, zf := range r.File {
+		outPath := filepath.Join("extracted", zf.Name)
+		if zf.FileInfo().IsDir() {
+			os.MkdirAll(outPath, zf.Mode())
+			continue
+		}
+		os.MkdirAll(filepath.Dir(outPath), 0755)
+		src, _ := zf.Open()
+		dst, _ := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode())
+		io.Copy(dst, src)
+		src.Close()
+		dst.Close()
+	}
+}
+```
+
+Run the stdlib demo with:
+
+```bash
+cd examples/selfextract-stdlib
+bash demo.sh
+```
+
 ## License
 
 The source code uses the [MIT license](LICENSE.txt).
 
-Contributors: [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
+Contributors: Claude Opus 4.6, [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
