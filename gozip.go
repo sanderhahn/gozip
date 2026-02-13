@@ -142,6 +142,8 @@ func extractFile(f *zip.File, rootDir *os.File, entry string) error {
 
 	// Safely resolve the parent directory within the root using OpenatInRoot,
 	// then create the file relative to the directory handle via /proc/self/fd.
+	// Note: This relies on procfs being mounted, which is required by the
+	// pathrs-lite package (Linux-only).
 	parentDir := filepath.Dir(entry)
 	baseName := filepath.Base(entry)
 
@@ -165,7 +167,9 @@ func extractFile(f *zip.File, rootDir *os.File, entry string) error {
 	}
 	defer dirHandle.Close()
 
-	out, err := os.OpenFile(fmt.Sprintf("/proc/self/fd/%d/%s", dirHandle.Fd(), baseName), os.O_CREATE|os.O_RDWR, perms)
+	filePath := fmt.Sprintf("/proc/self/fd/%d/%s", dirHandle.Fd(), baseName)
+
+	out, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, perms)
 	if err != nil {
 		return err
 	}
@@ -188,7 +192,7 @@ func extractFile(f *zip.File, rootDir *os.File, entry string) error {
 	}
 
 	mtime := f.FileInfo().ModTime()
-	return os.Chtimes(fmt.Sprintf("/proc/self/fd/%d/%s", dirHandle.Fd(), baseName), mtime, mtime)
+	return os.Chtimes(filePath, mtime, mtime)
 }
 
 // UnzipList lists all the files in the zip file at path.
