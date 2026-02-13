@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	pathrs "github.com/cyphar/filepath-securejoin/pathrs-lite"
+
 	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
@@ -94,6 +96,10 @@ func Unzip(zippath string, destination string) error {
 		return err
 	}
 
+	if err := os.MkdirAll(destAbs, 0755); err != nil {
+		return err
+	}
+
 	for _, f := range r.File {
 		entry := filepath.ToSlash(f.Name)
 		entry = strings.TrimLeft(entry, "/")
@@ -103,18 +109,20 @@ func Unzip(zippath string, destination string) error {
 			return fmt.Errorf("illegal path %q: contains path traversal", f.Name)
 		}
 
-		fullname, err := securejoin.SecureJoin(destAbs, entry)
-		if err != nil {
-			return fmt.Errorf("illegal path %q: %w", f.Name, err)
-		}
-
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(fullname, f.FileInfo().Mode().Perm()); err != nil {
-				return err
+			if err := pathrs.MkdirAll(destAbs, entry, f.FileInfo().Mode().Perm()); err != nil {
+				return fmt.Errorf("illegal path %q: %w", f.Name, err)
 			}
 		} else {
-			if err := os.MkdirAll(filepath.Dir(fullname), 0755); err != nil {
-				return err
+			parentDir := filepath.Dir(entry)
+			if parentDir != "." {
+				if err := pathrs.MkdirAll(destAbs, parentDir, 0755); err != nil {
+					return fmt.Errorf("illegal path %q: %w", f.Name, err)
+				}
+			}
+			fullname, err := securejoin.SecureJoin(destAbs, entry)
+			if err != nil {
+				return fmt.Errorf("illegal path %q: %w", f.Name, err)
 			}
 			if err := extractFile(f, fullname); err != nil {
 				return err
