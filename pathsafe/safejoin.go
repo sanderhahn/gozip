@@ -9,7 +9,13 @@ import (
 )
 
 // SafeJoin joins dest with name while preventing path traversal, absolute paths,
-// and Windows volume or UNC paths, regardless of the host OS.
+// and Windows volume or UNC paths, regardless of the host OS. It normalizes
+// separators and rejects absolute or volume-prefixed inputs.
+//
+// Note: this is a pre-validation step. It reduces symlink-based escapes by
+// rejecting existing symlinks in the path, but it cannot eliminate TOCTOU
+// (time-of-check to time-of-use) races if an attacker can replace path
+// components after validation.
 func SafeJoin(dest, name string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("empty path")
@@ -63,7 +69,9 @@ func SafeJoin(dest, name string) (string, error) {
 }
 
 // ensureNoSymlinkPrefix rejects any pre-existing symlink in the target path
-// and confirms the final path resolves within dest.
+// and confirms the final path resolves within dest. This cannot fully prevent
+// TOCTOU (time-of-check to time-of-use) races if an attacker can swap in a
+// symlink after the checks but before file creation.
 func ensureNoSymlinkPrefix(dest, target string) error {
 	root := filepath.Clean(dest)
 	cleanTarget := filepath.Clean(target)

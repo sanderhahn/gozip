@@ -123,12 +123,10 @@ and size, or `zip.OpenReader` when you just have a file path.
 The example below uses `zip.OpenReader` for simplicity, which opens the file
 and constructs the reader for you.
 
-> **Warning:** Go's `archive/zip` does **not** sanitize file paths. A malicious
-> zip can contain entries like `../../../etc/cron.d/evil` that extract outside
-> the destination directory (known as a
-> [Zip Slip](https://security.snyk.io/research/zip-slip-vulnerability) attack).
-> The `gozip` library handles this internally, but when using `archive/zip`
-> directly you **must** validate paths yourself — see `sanitizePath` below.
+A brief note on Zip Slip: if zip entry paths are not validated, a crafted
+archive can write files outside the intended destination (for example via
+`../` segments), leading to arbitrary file overwrite. Learn more at
+[Zip Slip](https://github.com/snyk/zip-slip-vulnerability).
 
 A complete example lives in [examples/selfextract-stdlib/main.go](examples/selfextract-stdlib/main.go).
 
@@ -144,4 +142,5 @@ bash demo.sh
 The source code uses the [MIT license](LICENSE.txt).
 
 Contributors: [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
-Agents used: Copilot
+
+Agents Models: Copilot (GPT-5.2-Codex)
