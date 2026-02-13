@@ -10,8 +10,7 @@ import (
 	"strings"
 
 	pathrs "github.com/cyphar/filepath-securejoin/pathrs-lite"
-
-	securejoin "github.com/cyphar/filepath-securejoin"
+	"golang.org/x/sys/unix"
 )
 
 // ErrAlreadyZip is returned when trying to zip into a file that is already a zip.
@@ -100,6 +99,12 @@ func Unzip(zippath string, destination string) error {
 		return err
 	}
 
+	rootDir, err := os.OpenFile(destAbs, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	defer rootDir.Close()
+
 	for _, f := range r.File {
 		entry := filepath.ToSlash(f.Name)
 		entry = strings.TrimLeft(entry, "/")
@@ -110,21 +115,21 @@ func Unzip(zippath string, destination string) error {
 		}
 
 		if f.FileInfo().IsDir() {
-			if err := pathrs.MkdirAll(destAbs, entry, f.FileInfo().Mode().Perm()); err != nil {
-				return fmt.Errorf("illegal path %q: %w", f.Name, err)
-			}
-		} else {
-			parentDir := filepath.Dir(entry)
-			if parentDir != "." {
-				if err := pathrs.MkdirAll(destAbs, parentDir, 0755); err != nil {
-					return fmt.Errorf("illegal path %q: %w", f.Name, err)
-				}
-			}
-			fullname, err := securejoin.SecureJoin(destAbs, entry)
+			dirHandle, err := pathrs.MkdirAllHandle(rootDir, entry, f.FileInfo().Mode().Perm())
 			if err != nil {
 				return fmt.Errorf("illegal path %q: %w", f.Name, err)
 			}
-			if err := extractFile(f, fullname); err != nil {
+			dirHandle.Close()
+		} else {
+			parentDir := filepath.Dir(entry)
+			if parentDir != "." {
+				parentHandle, err := pathrs.MkdirAllHandle(rootDir, parentDir, 0755)
+				if err != nil {
+					return fmt.Errorf("illegal path %q: %w", f.Name, err)
+				}
+				parentHandle.Close()
+			}
+			if err := extractFile(f, rootDir, entry); err != nil {
 				return err
 			}
 		}
@@ -132,9 +137,35 @@ func Unzip(zippath string, destination string) error {
 	return nil
 }
 
-func extractFile(f *zip.File, fullname string) error {
+func extractFile(f *zip.File, rootDir *os.File, entry string) error {
 	perms := f.FileInfo().Mode().Perm()
-	out, err := os.OpenFile(fullname, os.O_CREATE|os.O_RDWR, perms)
+
+	// Safely resolve the parent directory within the root using OpenatInRoot,
+	// then create the file relative to the directory handle via /proc/self/fd.
+	parentDir := filepath.Dir(entry)
+	baseName := filepath.Base(entry)
+
+	var parentPathHandle *os.File
+	var err error
+	if parentDir == "." {
+		// File is directly in root; use the root handle itself
+		parentPathHandle = rootDir
+	} else {
+		parentPathHandle, err = pathrs.OpenatInRoot(rootDir, parentDir)
+		if err != nil {
+			return err
+		}
+		defer parentPathHandle.Close()
+	}
+
+	// Reopen the O_PATH handle as a usable directory handle
+	dirHandle, err := pathrs.Reopen(parentPathHandle, unix.O_DIRECTORY|unix.O_RDONLY)
+	if err != nil {
+		return err
+	}
+	defer dirHandle.Close()
+
+	out, err := os.OpenFile(fmt.Sprintf("/proc/self/fd/%d/%s", dirHandle.Fd(), baseName), os.O_CREATE|os.O_RDWR, perms)
 	if err != nil {
 		return err
 	}
@@ -157,7 +188,7 @@ func extractFile(f *zip.File, fullname string) error {
 	}
 
 	mtime := f.FileInfo().ModTime()
-	return os.Chtimes(fullname, mtime, mtime)
+	return os.Chtimes(fmt.Sprintf("/proc/self/fd/%d/%s", dirHandle.Fd(), baseName), mtime, mtime)
 }
 
 // UnzipList lists all the files in the zip file at path.
