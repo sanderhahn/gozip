@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -174,7 +175,7 @@ func TestSafeJoin(t *testing.T) {
 }
 
 func TestSafeJoinSymlinkEscape(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests require elevated privileges on Windows")
 	}
 
@@ -193,7 +194,7 @@ func TestSafeJoinSymlinkEscape(t *testing.T) {
 }
 
 func TestSafeJoinDestIsSymlink(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests require elevated privileges on Windows")
 	}
 
