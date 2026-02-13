@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/sanderhahn/gozip/pathsafe"
 )
 
 func main() {
@@ -22,23 +24,15 @@ func main() {
 		log.Fatalf("cannot determine own path: %v", err)
 	}
 
-	f, err := os.Open(self)
-	if err != nil {
-		log.Fatalf("cannot open executable: %v", err)
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		log.Fatalf("cannot stat executable: %v", err)
-	}
-
-	r, err := zip.NewReader(f, info.Size())
+	rc, err := zip.OpenReader(self)
 	if err != nil {
 		fmt.Println("No embedded files found. Append files first:")
 		fmt.Printf("  gozip -c %s <files...>\n", os.Args[0])
 		os.Exit(1)
 	}
+	defer rc.Close()
+
+	r := &rc.Reader
 
 	if listFlag {
 		for _, zf := range r.File {
@@ -49,10 +43,14 @@ func main() {
 
 	fmt.Printf("Extracting to %s ...\n", dest)
 	for _, zf := range r.File {
-		outPath := filepath.Join(dest, zf.Name)
+		outPath, err := sanitizePath(dest, zf.Name)
+		if err != nil {
+			log.Printf("warning: dangerous entry %q skipped: %v", zf.Name, err)
+			continue
+		}
 
 		if zf.FileInfo().IsDir() {
-			if err := os.MkdirAll(outPath, zf.Mode()); err != nil {
+			if err := os.MkdirAll(outPath, zf.Mode().Perm()); err != nil {
 				log.Fatalf("mkdir failed: %v", err)
 			}
 			continue
@@ -69,19 +67,37 @@ func main() {
 	fmt.Println("Done.")
 }
 
+// sanitizePath ensures the target path stays within the destination directory,
+// preventing zip slip / path traversal attacks where a malicious zip entry
+// contains paths like "../../../etc/cron.d/evil".
+func sanitizePath(dest, name string) (string, error) {
+	target, err := pathsafe.SafeJoin(dest, name)
+	if err != nil {
+		return "", fmt.Errorf("illegal file path %q: %w", name, err)
+	}
+	return target, nil
+}
+
 func extractFile(zf *zip.File, outPath string) error {
 	src, err := zf.Open()
 	if err != nil {
 		return err
 	}
-	defer src.Close()
 
-	dst, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode())
+	dst, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode().Perm())
 	if err != nil {
+		src.Close()
 		return err
 	}
-	defer dst.Close()
 
-	_, err = io.Copy(dst, src)
-	return err
+	_, copyErr := io.Copy(dst, src)
+	closeErr := dst.Close()
+	srcErr := src.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return srcErr
 }

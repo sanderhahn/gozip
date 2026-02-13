@@ -7,9 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/sanderhahn/gozip/pathsafe"
 )
 
 // ErrAlreadyZip is returned when trying to zip into a file that is already a zip.
@@ -95,15 +94,7 @@ func Unzip(zippath string, destination string) error {
 	}
 
 	for _, f := range r.File {
-		entry := filepath.ToSlash(f.Name)
-		entry = strings.TrimLeft(entry, "/")
-
-		// Check for path traversal attempts
-		if strings.Contains(entry, "..") {
-			return fmt.Errorf("illegal path %q: contains path traversal", f.Name)
-		}
-
-		fullname, err := securejoin.SecureJoin(destAbs, entry)
+		fullname, err := pathsafe.SafeJoin(destAbs, f.Name)
 		if err != nil {
 			return fmt.Errorf("illegal path %q: %w", f.Name, err)
 		}

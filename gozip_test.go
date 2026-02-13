@@ -4,9 +4,12 @@ import (
 	"archive/zip"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sanderhahn/gozip/pathsafe"
 )
 
 func TestZip(t *testing.T) {
@@ -115,6 +118,109 @@ func TestZipPathTraversal(t *testing.T) {
 	}
 
 	os.RemoveAll("extract_secure")
+}
+
+func TestSafeJoin(t *testing.T) {
+	dest := t.TempDir()
+	destResolved := dest
+	if resolved, err := filepath.EvalSymlinks(dest); err == nil {
+		destResolved = resolved
+	}
+
+	type testCase struct {
+		name    string
+		entry   string
+		want    string
+		wantErr bool
+	}
+
+	cases := []testCase{
+		{name: "file", entry: "file.txt", want: "file.txt"},
+		{name: "dir file", entry: "dir/sub.txt", want: "dir/sub.txt"},
+		{name: "dir file backslash", entry: `dir\sub.txt`, want: "dir/sub.txt"},
+		{name: "dot segment", entry: "a/./b", want: "a/b"},
+		{name: "parent cleanup", entry: "a/../b", want: "b"},
+		{name: "double slash", entry: "a//b", want: "a/b"},
+		{name: "empty", entry: "", wantErr: true},
+		{name: "dot", entry: ".", wantErr: true},
+		{name: "dotdot", entry: "..", wantErr: true},
+		{name: "traversal", entry: "../evil", wantErr: true},
+		{name: "deep traversal", entry: "a/../../evil", wantErr: true},
+		{name: "abs unix", entry: "/abs", wantErr: true},
+		{name: "abs windows", entry: `\\abs`, wantErr: true},
+		{name: "drive relative", entry: "C:evil", wantErr: true},
+		{name: "drive absolute", entry: `C:\\evil`, wantErr: true},
+		{name: "unc", entry: "//server/share", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pathsafe.SafeJoin(dest, tc.entry)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q, got nil", tc.entry)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tc.entry, err)
+			}
+			want := filepath.Join(destResolved, filepath.FromSlash(tc.want))
+			if got != want {
+				t.Fatalf("SafeJoin(%q) = %q, want %q", tc.entry, got, want)
+			}
+		})
+	}
+}
+
+func TestSafeJoinSymlinkEscape(t *testing.T) {
+	if os.Getenv("GOOS") == "windows" {
+		t.Skip("symlink tests require elevated privileges on Windows")
+	}
+
+	dest := t.TempDir()
+	outside := t.TempDir()
+
+	linkPath := filepath.Join(dest, "linkout")
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err := pathsafe.SafeJoin(dest, filepath.Join("linkout", "evil.txt"))
+	if err == nil {
+		t.Fatal("expected error for symlink escape, got nil")
+	}
+}
+
+func TestSafeJoinDestIsSymlink(t *testing.T) {
+	if os.Getenv("GOOS") == "windows" {
+		t.Skip("symlink tests require elevated privileges on Windows")
+	}
+
+	base := t.TempDir()
+	realDest := filepath.Join(base, "real")
+	if err := os.MkdirAll(realDest, 0755); err != nil {
+		t.Fatalf("mkdir real dest: %v", err)
+	}
+
+	linkDest := filepath.Join(base, "destlink")
+	if err := os.Symlink(realDest, linkDest); err != nil {
+		t.Fatalf("create dest symlink: %v", err)
+	}
+
+	got, err := pathsafe.SafeJoin(linkDest, "file.txt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resolved, err := filepath.EvalSymlinks(realDest)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	want := filepath.Join(resolved, "file.txt")
+	if got != want {
+		t.Fatalf("safeJoin symlink dest = %q, want %q", got, want)
+	}
 }
 
 func TestFilePermissionsPreserved(t *testing.T) {

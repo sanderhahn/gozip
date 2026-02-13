@@ -60,8 +60,8 @@ LICENSE.txt
 ### Building your own self-extracting binary
 
 A complete example lives in [`examples/selfextract/`](examples/selfextract/).
-The key idea is that your program calls `gozip.Unzip(os.Executable(), dest)` to
-extract files from itself:
+The key idea is that your program calls `os.Executable()` first and then
+`gozip.Unzip(self, dest)` to extract files from itself:
 
 ```go
 package main
@@ -75,7 +75,10 @@ import (
 )
 
 func main() {
-	self, _ := os.Executable()
+	self, err := os.Executable()
+	if err != nil {
+		log.Fatalf("cannot determine own path: %v", err)
+	}
 
 	if !gozip.IsZip(self) {
 		fmt.Println("No embedded files. Append them first:")
@@ -98,6 +101,8 @@ gozip -c myapp payload/   # append files to the binary
 ./myapp                   # extracts payload/ into ./extracted/
 ```
 
+A complete example lives in [examples/selfextract/main.go](examples/selfextract/main.go).
+
 Run the full demo with:
 
 ```bash
@@ -108,53 +113,24 @@ bash demo.sh
 ### Using only the standard library
 
 Since `gozip` appends a standard zip archive, you can also extract the embedded
-files using only `archive/zip` from the Go standard library. The key is to use
-`zip.NewReader` (which takes an `io.ReaderAt` and the total file size) instead
-of `zip.OpenReader` — it searches backwards from the end of the file to find
-the zip central directory, which works even when the zip is appended to a binary.
+files using only `archive/zip` from the Go standard library. `zip.OpenReader`
+is a convenience wrapper around opening the file and calling `zip.NewReader`
+with the total file size. Both ultimately scan backwards from the end of the
+file to locate the zip central directory, which works even when the zip is
+appended to a binary. Use `zip.NewReader` when you already have an `io.ReaderAt`
+and size, or `zip.OpenReader` when you just have a file path.
 
-A complete example lives in [`examples/selfextract-stdlib/`](examples/selfextract-stdlib/):
+The example below uses `zip.OpenReader` for simplicity, which opens the file
+and constructs the reader for you.
 
-```go
-package main
+> **Warning:** Go's `archive/zip` does **not** sanitize file paths. A malicious
+> zip can contain entries like `../../../etc/cron.d/evil` that extract outside
+> the destination directory (known as a
+> [Zip Slip](https://security.snyk.io/research/zip-slip-vulnerability) attack).
+> The `gozip` library handles this internally, but when using `archive/zip`
+> directly you **must** validate paths yourself — see `sanitizePath` below.
 
-import (
-	"archive/zip"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-)
-
-func main() {
-	self, _ := os.Executable()
-
-	f, _ := os.Open(self)
-	defer f.Close()
-	info, _ := f.Stat()
-
-	// zip.NewReader finds the archive appended to the binary
-	r, err := zip.NewReader(f, info.Size())
-	if err != nil {
-		fmt.Println("No embedded files found.")
-		os.Exit(1)
-	}
-
-	for _, zf := range r.File {
-		outPath := filepath.Join("extracted", zf.Name)
-		if zf.FileInfo().IsDir() {
-			os.MkdirAll(outPath, zf.Mode())
-			continue
-		}
-		os.MkdirAll(filepath.Dir(outPath), 0755)
-		src, _ := zf.Open()
-		dst, _ := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode())
-		io.Copy(dst, src)
-		src.Close()
-		dst.Close()
-	}
-}
-```
+A complete example lives in [examples/selfextract-stdlib/main.go](examples/selfextract-stdlib/main.go).
 
 Run the stdlib demo with:
 
@@ -167,4 +143,5 @@ bash demo.sh
 
 The source code uses the [MIT license](LICENSE.txt).
 
-Contributors: Claude Opus 4.6, [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
+Contributors: [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
+Agents used: Copilot
