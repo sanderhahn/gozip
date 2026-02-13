@@ -30,6 +30,24 @@ for _, f := range list {
 err := gozip.Unzip("file.zip", "destination")
 ```
 
+## Security
+
+The `gozip.Unzip` function includes path sanitization to prevent zip-slip and
+path traversal attacks. It validates paths to ensure extracted files remain
+within the destination directory.
+
+**Implementation Note:** As of recent versions, `gozip` uses an internal
+`pathsafe` package for path validation (replacing the previous external
+`github.com/cyphar/filepath-securejoin` dependency). The internal implementation
+provides defense-in-depth against common attack vectors but has inherent
+limitations due to TOCTOU (time-of-check to time-of-use) race conditions.
+
+For typical use cases where archives come from trusted sources and the extraction
+environment is under user control, the current implementation provides appropriate
+protection. For high-security scenarios involving untrusted archives in shared or
+hostile environments, additional hardening measures may be necessary. See the
+`pathsafe` package documentation for detailed security considerations.
+
 ## Self Extracting Binary
 
 The zip functions also work when the actual zip content starts behind a binary.
