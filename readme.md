@@ -30,17 +30,38 @@ for _, f := range list {
 err := gozip.Unzip("file.zip", "destination")
 ```
 
+## Security
+
+The `gozip.Unzip` function includes path sanitization to prevent zip-slip and
+path traversal attacks. It validates paths to ensure extracted files remain
+within the destination directory.
+
+**Implementation Note:** As of recent versions, `gozip` uses an internal
+`pathsafe` package for path validation (replacing the previous external
+`github.com/cyphar/filepath-securejoin` dependency). The internal implementation
+provides defense-in-depth against common attack vectors but has inherent
+limitations due to TOCTOU (time-of-check to time-of-use) race conditions.
+
+For typical use cases where archives come from trusted sources and the extraction
+environment is under user control, the current implementation provides appropriate
+protection. For high-security scenarios involving untrusted archives in shared or
+hostile environments, additional hardening measures may be necessary. See the
+`pathsafe` package documentation for detailed security considerations.
+
 ## Self Extracting Binary
 
 The zip functions also work when the actual zip content starts behind a binary.
-For example its possible to append the `readme.md` into the `gozip` command.
+This makes it possible to distribute a single executable that carries its own
+payload files and extracts them at runtime.
+
+### Quick example with the gozip CLI
 
 ```bash
 $ gozip
 Usage of gozip:
   -c	create zip (arguments: zipfile [files...])
   -l	list zip (arguments: zipfile)
-  -x	extract zip (arguments: zipfile [destination]
+  -x	extract zip (arguments: zipfile [destination])
 
 # make temporary copy of gozip
 $ cp `which gozip` gozip
@@ -54,8 +75,90 @@ readme.md
 LICENSE.txt
 ```
 
+### Building your own self-extracting binary
+
+A complete example lives in [`examples/selfextract/`](examples/selfextract/).
+The key idea is that your program calls `os.Executable()` first and then
+`gozip.Unzip(self, dest)` to extract files from itself:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/sanderhahn/gozip"
+)
+
+func main() {
+	self, err := os.Executable()
+	if err != nil {
+		log.Fatalf("cannot determine own path: %v", err)
+	}
+
+	if !gozip.IsZip(self) {
+		fmt.Println("No embedded files. Append them first:")
+		fmt.Printf("  gozip -c %s <files...>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	if err := gozip.Unzip(self, "extracted"); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Files extracted to ./extracted")
+}
+```
+
+Then build and pack:
+
+```bash
+go build -o myapp .
+gozip -c myapp payload/   # append files to the binary
+./myapp                   # extracts payload/ into ./extracted/
+```
+
+A complete example lives in [examples/selfextract/main.go](examples/selfextract/main.go).
+
+Run the full demo with:
+
+```bash
+cd examples/selfextract
+bash demo.sh
+```
+
+### Using only the standard library
+
+Since `gozip` appends a standard zip archive, you can also extract the embedded
+files using only `archive/zip` from the Go standard library. `zip.OpenReader`
+is a convenience wrapper around opening the file and calling `zip.NewReader`
+with the total file size. Both ultimately scan backwards from the end of the
+file to locate the zip central directory, which works even when the zip is
+appended to a binary. Use `zip.NewReader` when you already have an `io.ReaderAt`
+and size, or `zip.OpenReader` when you just have a file path.
+
+The example below uses `zip.OpenReader` for simplicity, which opens the file
+and constructs the reader for you.
+
+A brief note on Zip Slip: if zip entry paths are not validated, a crafted
+archive can write files outside the intended destination (for example via
+`../` segments), leading to arbitrary file overwrite. Learn more at
+[Zip Slip](https://github.com/snyk/zip-slip-vulnerability).
+
+A complete example lives in [examples/selfextract-stdlib/main.go](examples/selfextract-stdlib/main.go).
+
+Run the stdlib demo with:
+
+```bash
+cd examples/selfextract-stdlib
+bash demo.sh
+```
+
 ## License
 
 The source code uses the [MIT license](LICENSE.txt).
 
 Contributors: [eqawasm](https://github.com/eqawasm), [dixonwille](https://github.com/dixonwille)
+
+Agents Models: Copilot (GPT-5.2-Codex)
